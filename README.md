@@ -53,16 +53,3 @@ cd fake-job-detect-nlp
 python -m streamlit run app.py
 
 
----
-
-## Code / Notebook
-- All preprocessing, model training, evaluation, and handling of imbalanced data is in the `notebooks/` folder.  
-- Explore the experiments and metrics in:
-  - `data_preprocessing.ipynb`
-  - `model_training.ipynb`
-
-
-
-## Project Structure
-
-
