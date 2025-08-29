@@ -1,10 +1,60 @@
-This is fake job postings prediction 
-We will using model 
-Traditional Model
-1. Random Forest
-2. Naives Baiyes
-3. Support Vector Machine
+# Fake Job Postings Prediction
+
+[![Python](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-App-orange.svg)](https://ai-assignment.streamlit.app/)
+
+Predict whether a job posting is **fraudulent or legitimate** using traditional machine learning models and techniques for handling **imbalanced data**.
+
+---
+
+## Table of Contents
+- [Project Overview](#project-overview)
+- [Models Used](#models-used)
+- [Deployment](#deployment)
+- [How to Run Locally](#how-to-run-locally)
+
+---
+
+## Project Overview
+This project focuses on detecting **fake job postings** from a dataset of job listings. The workflow includes:
+
+1. Text preprocessing (cleaning and generating `cleaned_text`).  
+2. Feature extraction using **TF-IDF**.  
+3. Training **machine learning models**: Random Forest, Naive Bayes, and SVM.  
+4. Handling **imbalanced data** using methods like undersampling, oversampling, and hybrid approaches.  
+5. Deploying the predictive model as a **Streamlit app** for easy interaction.
+
+> The Coding will put the **notebook folder** that contains ipynb notebook and model joblib.<br>
+> For the deployment streamlit webapp is **app.py**
+
+---
+
+## Models Used
+- **Random Forest Classifier**  
+- **Naive Bayes Classifier**  
+- **Support Vector Machine (SVM)**  
+
+> Each model is evaluated with different strategies to handle imbalanced data for better detection of fraudulent postings.
+
+---
+
+## Deployment
+The project is deployed on **Streamlit**:
+
+[🔗 View the App](https://ai-assignment.streamlit.app/)
+
+---
+
+## How to Run Locally
+
+Run the following commands in your terminal:
+
+```bash
+git clone https://github.com/your-username/fake-job-detect-nlp.git
+cd fake-job-detect-nlp
+python -m streamlit run app.py
 
 
+-
 
-Deploy at Streamlit - https://fake-job-detect-nlp-zxmfnx9txjn8vdg7tsgtpb.streamlit.app/
+
