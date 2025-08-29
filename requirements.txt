@@ -1,0 +1,16 @@
+streamlit
+scikit-learn
+pandas
+numpy
+imbalanced-learn
+beautifulsoup4
+nltk
+joblib
+torch
+transformers
+accelerate
+lime
+seaborn
+wordcloud
+matplotlib
+plotly

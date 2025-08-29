@@ -1,0 +1,656 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import joblib
+import os
+import re
+from bs4 import BeautifulSoup
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
+import lime
+from lime.lime_text import LimeTextExplainer
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import classification_report, confusion_matrix
+import warnings
+warnings.filterwarnings('ignore')
+
+# Download NLTK data if not already present
+@st.cache_resource
+def download_nltk_data():
+    try:
+        nltk.data.find('corpora/stopwords')
+        nltk.data.find('tokenizers/punkt')
+        nltk.data.find('corpora/wordnet')
+    except LookupError:
+        nltk.download('stopwords', quiet=True)
+        nltk.download('punkt_tab', quiet=True)
+        nltk.download('wordnet', quiet=True)
+    return True
+
+# Load models and vectorizer
+@st.cache_resource
+def load_models_and_vectorizer():
+    """Load all trained models and the TF-IDF vectorizer"""
+    model_dir = "notebook/models_notebook"
+    
+    # Load vectorizer
+    vectorizer_path = os.path.join(model_dir, "vectorizer.joblib")
+    if not os.path.exists(vectorizer_path):
+        st.error(f"Vectorizer not found at {vectorizer_path}")
+        return None, None
+    
+    vectorizer = joblib.load(vectorizer_path)
+    
+    # Model configurations
+    model_configs = {
+        'original': 'Original (No Sampling)',
+        'undersample': 'Random Under Sampling', 
+        'hybrid': 'SMOTE-ENN Hybrid',
+        'adasyn': 'ADASYN Over Sampling'
+    }
+    
+    classifier_names = ['random_forest', 'naive_bayes', 'support_vector_machine']
+    display_names = ['Random Forest', 'Naive Bayes', 'Support Vector Machine']
+    
+    # Load all models
+    models = {}
+    for sampling_type in model_configs.keys():
+        models[sampling_type] = {}
+        for clf_name, display_name in zip(classifier_names, display_names):
+            model_path = os.path.join(model_dir, f"{clf_name}_{sampling_type}.joblib")
+            if os.path.exists(model_path):
+                models[sampling_type][display_name] = joblib.load(model_path)
+    
+    return models, vectorizer
+
+# Text preprocessing functions
+def map_education_level(education):
+    if pd.isna(education) or education == "": return 'Unknown'
+    level_map = {
+        "Bachelor's Degree": 'Bachelor',
+        'High School or equivalent': 'High School',
+        'Unspecified': 'Unknown',
+        "Master's Degree": 'Master',
+        'Associate Degree': 'Associate',
+        'Certification': 'Certification',
+        'Some College Coursework Completed': 'Some College',
+        'Professional': 'Professional',
+        'Vocational': 'Vocational',
+        'Some High School Coursework': 'High School',
+        'Doctorate': 'Doctorate',
+        'Vocational - HS Diploma': 'High School',
+        'Vocational - Degree': 'Associate'
+    }
+    return level_map.get(education, 'Other')
+
+def map_industry(industry):
+    if pd.isna(industry) or industry == "": return 'Unknown'
+    level_map = {
+        "Marketing and Advertising":"Marketing", "Computer Software":"Technology",
+        "Hospital & Health Care":"Healthcare", "Online Media":"Media",
+        "Information Technology and Services":"Technology", "Financial Services":"Finance",
+        "Management Consulting":"Consulting", "Events Services":"Events",
+        "Internet":"Technology", "Facilities Services":"Services",
+        "Consumer Electronics":"Consumer Goods", "Telecommunications":"Telecommunications",
+        "Consumer Services":"Services", "Construction":"Construction",
+        "Oil & Energy":"Energy", "Education Management":"Education",
+        "Building Materials":"Construction Materials", "Banking":"Finance",
+        "Food & Beverages":"Food", "Food Production":"Food",
+        "Health, Wellness and Fitness":"Health", "Insurance":"Finance",
+        "E-Learning":"Education", "Cosmetics":"Beauty",
+        "Staffing and Recruiting":"Services", "Venture Capital & Private Equity":"Finance",
+        "Leisure, Travel & Tourism":"Travel", "Human Resources":"HR",
+        "Pharmaceuticals":"Medical", "Farming":"Agriculture",
+        "Legal Services":"Law", "Luxury Goods & Jewelry":"Luxury",
+        "Machinery":"Manufacturing", "Real Estate":"Property",
+        "Mechanical or Industrial Engineering":"Engineering",
+        "Public Relations and Communications":"PR", "Consumer Goods":"Consumer Products",
+        "Medical Practice":"Medical", "Electrical/Electronic Manufacturing":"Manufacturing",
+        "Hospitality":"Services", "Music":"Entertainment",
+        "Market Research":"Research", "Automotive":"Automotive",
+        "Philanthropy":"Charity", "Utilities":"Services",
+        "Primary/Secondary Education":"Education", "Logistics and Supply Chain":"Logistics",
+        "Design":"Design", "Gambling & Casinos":"Entertainment",
+        "Accounting":"Finance", "Environmental Services":"Environment",
+        "Mental Health Care":"Medical", "Investment Management":"Finance",
+        "Apparel & Fashion":"Fashion", "Media Production":"Media",
+        "Publishing":"Media", "Medical Devices":"Medical",
+        "Information Services":"Information", "Retail":"Retail",
+        "Sports":"Sports", "Computer Games":"Entertainment",
+        "Chemicals":"Chemistry", "Aviation & Aerospace":"Aerospace",
+        "Business Supplies and Equipment":"Business", "Program Development":"Development",
+        "Computer Networking":"Technology", "Biotechnology":"Biotech",
+        "Civic & Social Organization":"Social", "Religious Institutions":"Religion",
+        "Warehousing":"Logistics", "Airlines/Aviation":"Aviation",
+        "Writing and Editing":"Writing", "Restaurants":"Food",
+        "Outsourcing/Offshoring":"Services", "Transportation/Trucking/Railroad":"Transport",
+        "Wireless":"Telecommunications", "Investment Banking":"Finance",
+        "Nonprofit Organization Management":"Nonprofit", "Libraries":"Education",
+        "Computer Hardware":"Technology", "Broadcast Media":"Media",
+        "Printing":"Printing", "Graphic Design":"Design",
+        "Entertainment":"Entertainment", "Wholesale":"Retail",
+        "Research":"Research", "Animation":"Entertainment",
+        "Government Administration":"Government", "Capital Markets":"Finance",
+        "Computer & Network Security":"Technology", "Semiconductors":"Technology",
+        "Security and Investigations":"Security", "Architecture & Planning":"Architecture",
+        "Maritime":"Maritime", "Fund-Raising":"Charity",
+        "Higher Education":"Education", "Renewables & Environment":"Environment",
+        "Motion Pictures and Film":"Entertainment", "Law Practice":"Law",
+        "Government Relations":"Government", "Packaging and Containers":"Packaging",
+        "Sporting Goods":"Sports", "Mining & Metals":"Mining",
+        "Import and Export":"Trade", "International Trade and Development":"Trade",
+        "Professional Training & Coaching":"Training", "Textiles":"Textile",
+        "Commercial Real Estate":"Property", "Law Enforcement":"Law",
+        "Package/Freight Delivery":"Delivery", "Translation and Localization":"Language",
+        "Photography":"Photography", "Industrial Automation":"Automation",
+        "Wine and Spirits":"Beverage", "Public Safety":"Safety",
+        "Civil Engineering":"Engineering", "Military":"Defense",
+        "Defense & Space":"Defense", "Veterinary":"Animal",
+        "Executive Office":"Management", "Performing Arts":"Arts",
+        "Individual & Family Services":"Social", "Public Policy":"Government",
+        "Nanotechnology":"Science", "Museums and Institutions":"Culture",
+        "Fishery":"Agriculture", "Plastics":"Chemistry",
+        "Furniture":"Household", "Shipbuilding":"Maritime",
+        "Alternative Dispute Resolution":"Legal", "Ranching":"Agriculture"
+    }
+    return level_map.get(industry, 'Other')
+
+def clean_text(text):
+    if pd.isna(text) or text == "":
+        return ""
+
+    # Remove HTML tags
+    text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
+    
+    # Remove non-ASCII characters
+    text = text.encode("ascii", "ignore").decode("ascii")
+    
+    # Remove URLs and emails
+    url_pattern = r"https?://\S+|www\.\S+"
+    email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
+    text = re.sub(url_pattern, "", text, flags=re.IGNORECASE)
+    text = re.sub(email_pattern, "", text, flags=re.IGNORECASE)
+    
+    # Normalize whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+    
+    # Tokenize & lowercase (keeping only alphabetic tokens)
+    tokens = [t for t in word_tokenize(text.lower()) if t.isalpha()]
+    
+    # Remove stopwords
+    stop_words = set(stopwords.words("english"))
+    tokens = [w for w in tokens if w not in stop_words]
+    
+    # Lemmatize words
+    lemmatizer = WordNetLemmatizer()
+    tokens = [lemmatizer.lemmatize(w) for w in tokens]
+    
+    return " ".join(tokens)
+
+def preprocess_job_data(job_data):
+    """Preprocess job posting data similar to training data"""
+    
+    # Fill missing values
+    for key in job_data:
+        if job_data[key] == "" or pd.isna(job_data[key]):
+            job_data[key] = "Unknown"
+    
+    # Apply categorical mappings
+    if 'required_education' in job_data:
+        job_data['required_education'] = map_education_level(job_data['required_education'])
+    
+    if 'industry' in job_data:
+        job_data['industry'] = map_industry(job_data['industry'])
+    
+    # Convert binary flags
+    for col in ['has_company_logo', 'has_questions']:
+        if col in job_data:
+            job_data[col] = 'Yes' if job_data[col] else 'No'
+    
+    # Combine all text fields
+    text_fields = [
+        'title', 'department', 'location', 'company_profile', 'description',
+        'requirements', 'benefits', 'employment_type', 'required_experience',
+        'required_education', 'industry', 'function', 'has_company_logo', 'has_questions'
+    ]
+    
+    combined_text = ' '.join([str(job_data.get(field, 'Unknown')) for field in text_fields])
+    
+    # Clean the combined text
+    cleaned_text = clean_text(combined_text)
+    
+    return cleaned_text
+
+# Prediction function for LIME
+def predict_proba_func(texts):
+    """Prediction function that LIME can use"""
+    vectorized = st.session_state.vectorizer.transform(texts)
+    return st.session_state.selected_model.predict_proba(vectorized)
+
+# Initialize the app
+def main():
+    st.set_page_config(
+        page_title="🕵️ Fake Job Posting Detection",
+        page_icon="🕵️",
+        layout="wide"
+    )
+    
+    st.title("🕵️ Fake Job Posting Detection System")
+    st.markdown("**Detect fraudulent job postings using machine learning with explainable AI**")
+    
+    # Download NLTK data
+    download_nltk_data()
+    
+    # Load models
+    if 'models' not in st.session_state or 'vectorizer' not in st.session_state:
+        with st.spinner("Loading models and vectorizer..."):
+            models, vectorizer = load_models_and_vectorizer()
+            if models is None or vectorizer is None:
+                st.error("Failed to load models. Please check if model files exist.")
+                return
+            st.session_state.models = models
+            st.session_state.vectorizer = vectorizer
+    
+    # Sidebar for model selection
+    st.sidebar.header("🎛️ Model Configuration")
+    
+    # Get available sampling strategies and classifiers
+    available_sampling = list(st.session_state.models.keys())
+    available_classifiers = []
+    
+    for sampling_type in available_sampling:
+        available_classifiers.extend(list(st.session_state.models[sampling_type].keys()))
+    
+    available_classifiers = list(set(available_classifiers))
+    
+    # Model selection
+    sampling_strategy = st.sidebar.selectbox(
+        "Sampling Strategy:",
+        available_sampling,
+        format_func=lambda x: {
+            'original': 'Original (No Sampling)',
+            'undersample': 'Random Under Sampling',
+            'hybrid': 'SMOTE-ENN Hybrid', 
+            'adasyn': 'ADASYN Over Sampling'
+        }.get(x, x)
+    )
+    
+    classifier_type = st.sidebar.selectbox(
+        "Classifier Type:",
+        list(st.session_state.models[sampling_strategy].keys())
+    )
+    
+    # Load selected model
+    st.session_state.selected_model = st.session_state.models[sampling_strategy][classifier_type]
+    st.sidebar.success(f"Selected: {classifier_type} ({sampling_strategy})")
+    
+    # Main content tabs
+    tab1, tab2, tab3 = st.tabs(["🔍 Single Prediction", "📊 Batch Prediction", "📈 Model Info"])
+    
+    with tab1:
+        st.header("🔍 Single Job Posting Analysis")
+        
+        #col1, col2 = st.columns([2, 1])
+        
+        #with col1:
+            # Input form
+        st.subheader("Job Posting Details")
+            
+        title = st.text_input("Job Title", "Data Entry Clerk")
+        company_profile = st.text_area("Company Profile","JOIN OUR TEAM! THEN YOU CAN Monthly income exceeds 10,000")
+        description = st.text_area("Job Description*", "Work from home and earn $5000 per week! Just send us your personal information and we will get you started immediately. No skills required!", height=150)
+        requirements = st.text_area("Requirements", "Basic computer skills")
+        benefits = st.text_area("Benefits", "High pay, work from home. No experience needed")
+            
+        col1_1, col1_2 = st.columns(2)
+        with col1_1:
+            location = st.text_input("Location", "US, NY, New York")
+            department = st.text_input("Department", "Customer Service")
+            employment_type = st.selectbox("Employment Type", 
+                ["", "Full-time", "Part-time", "Contract", "Temporary", "Other"])
+            
+        with col1_2:
+            required_experience = st.selectbox("Required Experience", 
+                ["", "Entry level", "Associate", "Mid-Senior level", "Director", "Executive"])
+            required_education = st.selectbox("Required Education", 
+                ["", "High School or equivalent", "Bachelor's Degree", "Master's Degree", 
+                    "Associate Degree", "Doctorate", "Professional", "Certification"])
+            industry = st.text_input("Industry", "Financial Services")
+        
+        function = st.text_area("Company Profile", "We are a data-driven company...")
+        
+        col1_3, col1_4 = st.columns(2)
+        with col1_3:
+            has_company_logo = st.checkbox("Has Company Logo")
+        with col1_4:
+            has_questions = st.checkbox("Has Screening Questions")
+        
+        st.subheader("🎯 Prediction Results")
+        
+        if st.button("🔍 Analyze Job Posting", type="primary"):
+            if not title or not description:
+                st.error("Please fill in at least Job Title and Description!")
+            else:
+                # Prepare job data
+                job_data = {
+                    'title': title,
+                    'department': department, 
+                    'location': location,
+                    'company_profile': company_profile,
+                    'description': description,
+                    'requirements': requirements,
+                    'benefits': benefits,
+                    'employment_type': employment_type,
+                    'required_experience': required_experience,
+                    'required_education': required_education,
+                    'industry': industry,
+                    'function': function,
+                    'has_company_logo': has_company_logo,
+                    'has_questions': has_questions
+                }
+                
+                # Preprocess the data
+                cleaned_text = preprocess_job_data(job_data)
+                
+                # Vectorize
+                X_vectorized = st.session_state.vectorizer.transform([cleaned_text])
+                
+                # Make prediction
+                prediction = st.session_state.selected_model.predict(X_vectorized)[0]
+                prediction_proba = st.session_state.selected_model.predict_proba(X_vectorized)[0]
+                
+                # Display results
+                fraud_prob = prediction_proba[1]
+                
+                if prediction == 1:
+                    st.error(f"⚠️ **FRAUDULENT** ({fraud_prob:.1%} confidence)")
+                else:
+                    st.success(f"✅ **LEGITIMATE** ({(1-fraud_prob):.1%} confidence)")
+                
+                # Probability bar
+                st.subheader("Confidence Score")
+                st.progress(fraud_prob)
+                st.write(f"Fraud Probability: {fraud_prob:.3f}")
+                
+                # LIME Explanation
+                st.subheader("AI Explanation (LIME)")
+                
+                with st.spinner("Generating explanation..."):
+                    # Create LIME explainer
+                    explainer = LimeTextExplainer(class_names=['Legitimate', 'Fraudulent'])
+                    
+                    # Generate explanation
+                    explanation = explainer.explain_instance(
+                        cleaned_text, 
+                        predict_proba_func, 
+                        num_features=15,
+                        num_samples=1000
+                    )
+                    
+                    # Create layout similar to your image
+                    col_left, col_right = st.columns([1, 1])
+                    
+                    with col_left:
+                        # Prediction probabilities section
+                        st.markdown("### Prediction probabilities")
+                        
+                        # Create probability bars
+                        legitimate_prob = prediction_proba[0]
+                        fraudulent_prob = prediction_proba[1]
+                        
+                        # Legitimate bar
+                        st.markdown("**Legitimate**")
+                        st.progress(legitimate_prob, text=f"{legitimate_prob:.2f}")
+                        
+                        # Fraudulent bar  
+                        st.markdown("**Fraudulent**")
+                        st.progress(fraudulent_prob, text=f"{fraudulent_prob:.2f}")
+                        
+                        st.markdown("---")
+                        
+                        # Feature importance list
+                        exp_list = explanation.as_list()
+                        
+                        # Separate positive and negative weights
+                        legitimate_features = [(word, abs(weight)) for word, weight in exp_list if weight < 0]
+                        fraudulent_features = [(word, weight) for word, weight in exp_list if weight > 0]
+                        
+                        # Sort by weight magnitude
+                        legitimate_features.sort(key=lambda x: x[1], reverse=True)
+                        fraudulent_features.sort(key=lambda x: x[1], reverse=True)
+                        
+                        # Display tabs for Legitimate and Fraudulent
+                        tab_leg, tab_fraud = st.tabs(["Legitimate", "Fraudulent"])
+                        
+                        with tab_leg:
+                            if legitimate_features:
+                                for word, weight in legitimate_features[:10]:
+                                    st.markdown(f"**{word}** `{weight:.3f}`")
+                            else:
+                                st.write("No significant legitimate indicators")
+                        
+                        with tab_fraud:
+                            if fraudulent_features:
+                                for word, weight in fraudulent_features[:10]:
+                                    st.markdown(f"**{word}** `{weight:.3f}`")
+                            else:
+                                st.write("No significant fraud indicators")
+                    
+                    with col_right:
+                        # Text with highlighted words section
+                        st.markdown("### Text with highlighted words")
+                        
+                        # Get the original words and their importance
+                        word_weights = dict(exp_list)
+                        
+                        # Split cleaned text into words for highlighting
+                        words = cleaned_text.split()
+                        
+                        # Create highlighted text HTML
+                        highlighted_html = ""
+                        for word in words:
+                            if word in word_weights:
+                                weight = word_weights[word]
+                                if weight > 0:  # Fraudulent indicator
+                                    # Red background for fraud indicators
+                                    intensity = min(abs(weight) * 100, 80)  # Cap intensity
+                                    highlighted_html += f'<span style="background-color: rgba(255, 0, 0, {intensity/100}); padding: 2px; margin: 1px; border-radius: 3px;">{word}</span> '
+                                elif weight < 0:  # Legitimate indicator  
+                                    # Blue background for legitimate indicators
+                                    intensity = min(abs(weight) * 100, 80)
+                                    highlighted_html += f'<span style="background-color: rgba(0, 100, 255, {intensity/100}); padding: 2px; margin: 1px; border-radius: 3px;">{word}</span> '
+                                else:
+                                    highlighted_html += f"{word} "
+                            else:
+                                highlighted_html += f"{word} "
+                        
+                        # Display highlighted text
+                        st.markdown(
+                            f'<div style="border: 1px solid #ccc; padding: 15px; border-radius: 5px; max-height: 400px; overflow-y: auto; line-height: 1.6;">{highlighted_html}</div>',
+                            unsafe_allow_html=True
+                        )
+                        
+                        # Legend
+                        st.markdown("""
+                        **Legend:**
+                        - <span style="background-color: rgba(255, 0, 0, 0.5); padding: 2px; border-radius: 3px;">Red highlight</span>: Indicates fraud
+                        - <span style="background-color: rgba(0, 100, 255, 0.5); padding: 2px; border-radius: 3px;">Blue highlight</span>: Indicates legitimate
+                        """, unsafe_allow_html=True)
+                    
+                # Store explanation in session state for download
+                st.session_state.last_explanation = explanation
+                st.session_state.last_job_data = job_data
+                st.session_state.last_prediction = {
+                    'prediction': prediction,
+                    'fraud_probability': fraud_prob,
+                    'model_used': f"{classifier_type} ({sampling_strategy})"
+                }
+    
+    with tab2:
+        st.header("📊 Batch Prediction")
+        
+        st.write("Upload a CSV file with job postings for batch analysis")
+        
+        # File upload
+        uploaded_file = st.file_uploader("Choose CSV file", type="csv")
+        
+        if uploaded_file is not None:
+            try:
+                # Load data
+                batch_data = pd.read_csv(uploaded_file)
+                st.write(f"Loaded {len(batch_data)} job postings")
+                st.write("Data preview:")
+                st.dataframe(batch_data.head())
+                
+                if st.button("🚀 Analyze Batch"):
+                    with st.spinner("Processing batch predictions..."):
+                        # Process each row
+                        predictions = []
+                        probabilities = []
+                        
+                        for idx, row in batch_data.iterrows():
+                            # Prepare job data
+                            job_data = {
+                                'title': row.get('title', ''),
+                                'department': row.get('department', ''),
+                                'location': row.get('location', ''),
+                                'company_profile': row.get('company_profile', ''),
+                                'description': row.get('description', ''),
+                                'requirements': row.get('requirements', ''),
+                                'benefits': row.get('benefits', ''),
+                                'employment_type': row.get('employment_type', ''),
+                                'required_experience': row.get('required_experience', ''),
+                                'required_education': row.get('required_education', ''),
+                                'industry': row.get('industry', ''),
+                                'function': row.get('function', ''),
+                                'has_company_logo': row.get('has_company_logo', False),
+                                'has_questions': row.get('has_questions', False)
+                            }
+                            
+                            # Preprocess and predict
+                            cleaned_text = preprocess_job_data(job_data)
+                            X_vectorized = st.session_state.vectorizer.transform([cleaned_text])
+                            
+                            pred = st.session_state.selected_model.predict(X_vectorized)[0]
+                            prob = st.session_state.selected_model.predict_proba(X_vectorized)[0][1]
+                            
+                            predictions.append(pred)
+                            probabilities.append(prob)
+                        
+                        # Add results to dataframe
+                        batch_data['prediction'] = predictions
+                        batch_data['fraud_probability'] = probabilities
+                        batch_data['risk_level'] = pd.cut(
+                            batch_data['fraud_probability'],
+                            bins=[0, 0.3, 0.7, 1.0],
+                            labels=['Low Risk', 'Medium Risk', 'High Risk']
+                        )
+                        
+                        # Display results
+                        st.subheader("📊 Batch Results")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            fraud_count = sum(predictions)
+                            st.metric("Fraudulent Jobs", fraud_count, f"{fraud_count/len(predictions):.1%}")
+                        
+                        with col2:
+                            high_risk = (batch_data['risk_level'] == 'High Risk').sum()
+                            st.metric("High Risk Jobs", high_risk, f"{high_risk/len(batch_data):.1%}")
+                        
+                        with col3:
+                            avg_fraud_prob = np.mean(probabilities)
+                            st.metric("Avg Fraud Probability", f"{avg_fraud_prob:.3f}")
+                        
+                        # Results table
+                        st.subheader("Detailed Results")
+                        
+                        # Filter options
+                        risk_filter = st.selectbox("Filter by Risk Level:", 
+                                                 ["All", "High Risk", "Medium Risk", "Low Risk"])
+                        
+                        filtered_data = batch_data.copy()
+                        if risk_filter != "All":
+                            filtered_data = batch_data[batch_data['risk_level'] == risk_filter]
+                        
+                        st.dataframe(
+                            filtered_data[['title', 'company_profile', 'prediction', 
+                                         'fraud_probability', 'risk_level']].round(3),
+                            use_container_width=True
+                        )
+                        
+                        # Download results
+                        csv = batch_data.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download Results CSV",
+                            data=csv,
+                            file_name="batch_predictions.csv",
+                            mime="text/csv"
+                        )
+                        
+            except Exception as e:
+                st.error(f"Error processing file: {str(e)}")
+    
+    with tab3:
+        st.header("📈 Model Information")
+        
+        # Display model details
+        st.subheader(f"Currently Selected Model: {classifier_type}")
+        st.write(f"Sampling Strategy: {sampling_strategy}")
+        
+        # Model parameters
+        model_params = st.session_state.selected_model.get_params()
+        st.subheader("Model Parameters")
+        
+        param_df = pd.DataFrame(list(model_params.items()), columns=['Parameter', 'Value'])
+        st.dataframe(param_df, use_container_width=True)
+        
+        # Feature importance (if available)
+        if hasattr(st.session_state.selected_model, 'feature_importances_'):
+            st.subheader("🎯 Top Feature Importances")
+            
+            feature_names = st.session_state.vectorizer.get_feature_names_out()
+            importances = st.session_state.selected_model.feature_importances_
+            
+            # Create feature importance dataframe
+            feature_df = pd.DataFrame({
+                'Feature': feature_names,
+                'Importance': importances
+            }).sort_values('Importance', ascending=False).head(20)
+            
+            # Plot
+            fig, ax = plt.subplots(figsize=(10, 8))
+            sns.barplot(data=feature_df, x='Importance', y='Feature', palette='viridis')
+            plt.title('Top 20 Feature Importances')
+            plt.xlabel('Importance Score')
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            # Display top features table
+            st.dataframe(feature_df, use_container_width=True)
+        
+        # Vocabulary info
+        st.subheader("📚 Vectorizer Information")
+        vocab_size = len(st.session_state.vectorizer.vocabulary_)
+        st.write(f"**Vocabulary Size:** {vocab_size:,} words")
+        st.write(f"**N-gram Range:** {st.session_state.vectorizer.ngram_range}")
+        st.write(f"**Max Features:** {st.session_state.vectorizer.max_features}")
+        
+        # Sample some vocabulary
+        sample_vocab = list(st.session_state.vectorizer.vocabulary_.keys())[:20]
+        st.write("**Sample Vocabulary:**", ", ".join(sample_vocab))
+
+if __name__ == "__main__":
+    
+    # Run main app
+    main()
+    
+    # Footer
+    st.markdown("---")
+    st.markdown(
+        "**Note:** This system is designed to assist in identifying potentially fraudulent job postings. "
+        "Always use human judgment and additional verification methods for final decisions."
+    )
