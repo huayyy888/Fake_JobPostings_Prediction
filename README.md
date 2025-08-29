@@ -24,8 +24,8 @@ This project focuses on detecting **fake job postings** from a dataset of job li
 4. Handling **imbalanced data** using methods like undersampling, oversampling, and hybrid approaches.  
 5. Deploying the predictive model as a **Streamlit app** for easy interaction.
 
-The Coding will put the notebook folder that contains ipynb notebook and model joblib. 
-For the deployment streamlit webapp is app.py
+> The Coding will put the **notebook folder** that contains ipynb notebook and model joblib.<br>
+> For the deployment streamlit webapp is **app.py**
 
 ---
 
