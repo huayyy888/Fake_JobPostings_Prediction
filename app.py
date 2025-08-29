@@ -288,7 +288,7 @@ def main():
     st.sidebar.success(f"Selected: {classifier_type} ({sampling_strategy})")
     
     # Main content tabs
-    tab1, tab2, tab3 = st.tabs(["🔍 Single Prediction", "📊 Batch Prediction", "📈 Model Info"])
+    tab1, = st.tabs(["🔍 Single Prediction"])
     
     with tab1:
         st.header("🔍 Single Job Posting Analysis")
@@ -320,7 +320,7 @@ def main():
                     "Associate Degree", "Doctorate", "Professional", "Certification"])
             industry = st.text_input("Industry", "Financial Services")
         
-        function = st.text_area("Company Profile", "We are a data-driven company...")
+        function = st.text_area("Function", "Customer Service...")
         
         col1_3, col1_4 = st.columns(2)
         with col1_3:
@@ -489,159 +489,6 @@ def main():
                     'model_used': f"{classifier_type} ({sampling_strategy})"
                 }
     
-    with tab2:
-        st.header("📊 Batch Prediction")
-        
-        st.write("Upload a CSV file with job postings for batch analysis")
-        
-        # File upload
-        uploaded_file = st.file_uploader("Choose CSV file", type="csv")
-        
-        if uploaded_file is not None:
-            try:
-                # Load data
-                batch_data = pd.read_csv(uploaded_file)
-                st.write(f"Loaded {len(batch_data)} job postings")
-                st.write("Data preview:")
-                st.dataframe(batch_data.head())
-                
-                if st.button("🚀 Analyze Batch"):
-                    with st.spinner("Processing batch predictions..."):
-                        # Process each row
-                        predictions = []
-                        probabilities = []
-                        
-                        for idx, row in batch_data.iterrows():
-                            # Prepare job data
-                            job_data = {
-                                'title': row.get('title', ''),
-                                'department': row.get('department', ''),
-                                'location': row.get('location', ''),
-                                'company_profile': row.get('company_profile', ''),
-                                'description': row.get('description', ''),
-                                'requirements': row.get('requirements', ''),
-                                'benefits': row.get('benefits', ''),
-                                'employment_type': row.get('employment_type', ''),
-                                'required_experience': row.get('required_experience', ''),
-                                'required_education': row.get('required_education', ''),
-                                'industry': row.get('industry', ''),
-                                'function': row.get('function', ''),
-                                'has_company_logo': row.get('has_company_logo', False),
-                                'has_questions': row.get('has_questions', False)
-                            }
-                            
-                            # Preprocess and predict
-                            cleaned_text = preprocess_job_data(job_data)
-                            X_vectorized = st.session_state.vectorizer.transform([cleaned_text])
-                            
-                            pred = st.session_state.selected_model.predict(X_vectorized)[0]
-                            prob = st.session_state.selected_model.predict_proba(X_vectorized)[0][1]
-                            
-                            predictions.append(pred)
-                            probabilities.append(prob)
-                        
-                        # Add results to dataframe
-                        batch_data['prediction'] = predictions
-                        batch_data['fraud_probability'] = probabilities
-                        batch_data['risk_level'] = pd.cut(
-                            batch_data['fraud_probability'],
-                            bins=[0, 0.3, 0.7, 1.0],
-                            labels=['Low Risk', 'Medium Risk', 'High Risk']
-                        )
-                        
-                        # Display results
-                        st.subheader("📊 Batch Results")
-                        
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            fraud_count = sum(predictions)
-                            st.metric("Fraudulent Jobs", fraud_count, f"{fraud_count/len(predictions):.1%}")
-                        
-                        with col2:
-                            high_risk = (batch_data['risk_level'] == 'High Risk').sum()
-                            st.metric("High Risk Jobs", high_risk, f"{high_risk/len(batch_data):.1%}")
-                        
-                        with col3:
-                            avg_fraud_prob = np.mean(probabilities)
-                            st.metric("Avg Fraud Probability", f"{avg_fraud_prob:.3f}")
-                        
-                        # Results table
-                        st.subheader("Detailed Results")
-                        
-                        # Filter options
-                        risk_filter = st.selectbox("Filter by Risk Level:", 
-                                                 ["All", "High Risk", "Medium Risk", "Low Risk"])
-                        
-                        filtered_data = batch_data.copy()
-                        if risk_filter != "All":
-                            filtered_data = batch_data[batch_data['risk_level'] == risk_filter]
-                        
-                        st.dataframe(
-                            filtered_data[['title', 'company_profile', 'prediction', 
-                                         'fraud_probability', 'risk_level']].round(3),
-                            use_container_width=True
-                        )
-                        
-                        # Download results
-                        csv = batch_data.to_csv(index=False)
-                        st.download_button(
-                            label="📥 Download Results CSV",
-                            data=csv,
-                            file_name="batch_predictions.csv",
-                            mime="text/csv"
-                        )
-                        
-            except Exception as e:
-                st.error(f"Error processing file: {str(e)}")
-    
-    with tab3:
-        st.header("📈 Model Information")
-        
-        # Display model details
-        st.subheader(f"Currently Selected Model: {classifier_type}")
-        st.write(f"Sampling Strategy: {sampling_strategy}")
-        
-        # Model parameters
-        model_params = st.session_state.selected_model.get_params()
-        st.subheader("Model Parameters")
-        
-        param_df = pd.DataFrame(list(model_params.items()), columns=['Parameter', 'Value'])
-        st.dataframe(param_df, use_container_width=True)
-        
-        # Feature importance (if available)
-        if hasattr(st.session_state.selected_model, 'feature_importances_'):
-            st.subheader("🎯 Top Feature Importances")
-            
-            feature_names = st.session_state.vectorizer.get_feature_names_out()
-            importances = st.session_state.selected_model.feature_importances_
-            
-            # Create feature importance dataframe
-            feature_df = pd.DataFrame({
-                'Feature': feature_names,
-                'Importance': importances
-            }).sort_values('Importance', ascending=False).head(20)
-            
-            # Plot
-            fig, ax = plt.subplots(figsize=(10, 8))
-            sns.barplot(data=feature_df, x='Importance', y='Feature', palette='viridis')
-            plt.title('Top 20 Feature Importances')
-            plt.xlabel('Importance Score')
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            # Display top features table
-            st.dataframe(feature_df, use_container_width=True)
-        
-        # Vocabulary info
-        st.subheader("📚 Vectorizer Information")
-        vocab_size = len(st.session_state.vectorizer.vocabulary_)
-        st.write(f"**Vocabulary Size:** {vocab_size:,} words")
-        st.write(f"**N-gram Range:** {st.session_state.vectorizer.ngram_range}")
-        st.write(f"**Max Features:** {st.session_state.vectorizer.max_features}")
-        
-        # Sample some vocabulary
-        sample_vocab = list(st.session_state.vectorizer.vocabulary_.keys())[:20]
-        st.write("**Sample Vocabulary:**", ", ".join(sample_vocab))
 
 if __name__ == "__main__":
     
