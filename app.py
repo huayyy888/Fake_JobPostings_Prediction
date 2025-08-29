@@ -402,11 +402,11 @@ def main():
                         fraudulent_prob = prediction_proba[1]
                         
                         # Legitimate bar
-                        st.markdown("**Legitimate**")
+                        st.markdown("**✅ Legitimate**")
                         st.progress(legitimate_prob, text=f"{legitimate_prob:.2f}")
                         
                         # Fraudulent bar  
-                        st.markdown("**Fraudulent**")
+                        st.markdown("**❌ Fraudulent**")
                         st.progress(fraudulent_prob, text=f"{fraudulent_prob:.2f}")
                         
                         st.markdown("---")
