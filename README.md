@@ -12,9 +12,6 @@ Predict whether a job posting is **fraudulent or legitimate** using traditional 
 - [Models Used](#models-used)
 - [Deployment](#deployment)
 - [How to Run Locally](#how-to-run-locally)
-- [Code / Notebook](#code--notebook)
-- [Project Structure](#project-structure)
-- [Notes](#notes)
 
 ---
 
@@ -26,6 +23,9 @@ This project focuses on detecting **fake job postings** from a dataset of job li
 3. Training **machine learning models**: Random Forest, Naive Bayes, and SVM.  
 4. Handling **imbalanced data** using methods like undersampling, oversampling, and hybrid approaches.  
 5. Deploying the predictive model as a **Streamlit app** for easy interaction.
+
+The Coding will put the notebook folder that contains ipynb notebook and model joblib. 
+For the deployment streamlit webapp is app.py
 
 ---
 
@@ -46,10 +46,15 @@ The project is deployed on **Streamlit**:
 ---
 
 ## How to Run Locally
-1. Clone the repository:
+
+Run the following commands in your terminal:
+
 ```bash
 git clone https://github.com/your-username/fake-job-detect-nlp.git
 cd fake-job-detect-nlp
 python -m streamlit run app.py
+
+
+-
 
 
