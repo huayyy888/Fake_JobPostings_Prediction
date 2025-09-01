@@ -44,27 +44,22 @@ def load_models_and_vectorizer():
     
     vectorizer = joblib.load(vectorizer_path)
     
-    # Model configurations
-    model_configs = {
-        'original': 'Original (No Sampling)',
-        'undersample': 'Random Under Sampling', 
-        'hybrid': 'SMOTE-ENN Hybrid',
-        'adasyn': 'ADASYN Over Sampling'
-    }
     
+    # Load only hybrid models
     classifier_names = ['random_forest', 'naive_bayes', 'support_vector_machine']
     display_names = ['Random Forest', 'Naive Bayes', 'Support Vector Machine']
-    
-    # Load all models
+
     models = {}
-    for sampling_type in model_configs.keys():
-        models[sampling_type] = {}
-        for clf_name, display_name in zip(classifier_names, display_names):
-            model_path = os.path.join(model_dir, f"{clf_name}_{sampling_type}.joblib")
-            if os.path.exists(model_path):
-                models[sampling_type][display_name] = joblib.load(model_path)
-    
+    sampling_type = 'hybrid'  # only load this one
+    models[sampling_type] = {}
+
+    for clf_name, display_name in zip(classifier_names, display_names):
+        model_path = os.path.join(model_dir, f"{clf_name}_{sampling_type}.joblib")
+        if os.path.exists(model_path):
+            models[sampling_type][display_name] = joblib.load(model_path)
+
     return models, vectorizer
+
 
 # Text preprocessing functions
 def map_education_level(education):
@@ -158,6 +153,105 @@ def map_industry(industry):
     }
     return level_map.get(industry, 'Other')
 
+def map_location(location):
+    # --- location mapping ---
+    level_map = {
+        "AE": "United Arab Emirates",
+        "AL": "Albania",
+        "AM": "Armenia",
+        "AR": "Argentina",
+        "AT": "Austria",
+        "AU": "Australia",
+        "BD": "Bangladesh",
+        "BE": "Belgium",
+        "BG": "Bulgaria",
+        "BH": "Bahrain",
+        "BR": "Brazil",
+        "BY": "Belarus",
+        "CA": "Canada",
+        "CH": "Switzerland",
+        "CL": "Chile",
+        "CM": "Cameroon",
+        "CN": "China",
+        "CO": "Colombia",
+        "CY": "Cyprus",
+        "CZ": "Czech Republic",
+        "DE": "Germany",
+        "DK": "Denmark",
+        "EE": "Estonia",
+        "EG": "Egypt",
+        "ES": "Spain",
+        "FI": "Finland",
+        "FR": "France",
+        "GB": "United Kingdom",
+        "GH": "Ghana",
+        "GR": "Greece",
+        "HK": "Hong Kong",
+        "HR": "Croatia",
+        "HU": "Hungary",
+        "ID": "Indonesia",
+        "IE": "Ireland",
+        "IL": "Israel",
+        "IN": "India",
+        "IQ": "Iraq",
+        "IS": "Iceland",
+        "IT": "Italy",
+        "JM": "Jamaica",
+        "JP": "Japan",
+        "KE": "Kenya",
+        "KH": "Cambodia",
+        "KR": "South Korea",
+        "KW": "Kuwait",
+        "KZ": "Kazakhstan",
+        "LK": "Sri Lanka",
+        "LT": "Lithuania",
+        "LU": "Luxembourg",
+        "LV": "Latvia",
+        "MA": "Morocco",
+        "MT": "Malta",
+        "MU": "Mauritius",
+        "MX": "Mexico",
+        "MY": "Malaysia",
+        "NG": "Nigeria",
+        "NI": "Nicaragua",
+        "NL": "Netherlands",
+        "NO": "Norway",
+        "NZ": "New Zealand",
+        "PA": "Panama",
+        "PE": "Peru",
+        "PH": "Philippines",
+        "PK": "Pakistan",
+        "PL": "Poland",
+        "PT": "Portugal",
+        "QA": "Qatar",
+        "RO": "Romania",
+        "RS": "Serbia",
+        "RU": "Russia",
+        "SA": "Saudi Arabia",
+        "SD": "Sudan",
+        "SE": "Sweden",
+        "SG": "Singapore",
+        "SI": "Slovenia",
+        "SK": "Slovakia",
+        "SV": "El Salvador",
+        "TH": "Thailand",
+        "TN": "Tunisia",
+        "TR": "Turkey",
+        "TT": "Trinidad and Tobago",
+        "TW": "Taiwan",
+        "UA": "Ukraine",
+        "UG": "Uganda",
+        "US": "United States",
+        "Unknown": "Unknown",
+        "VI": "U.S. Virgin Islands",
+        "VN": "Vietnam",
+        "ZA": "South Africa",
+        "ZM": "Zambia"
+    }
+    return level_map.get(location, 'Other')
+
+
+
 def clean_text(text):
     if pd.isna(text) or text == "":
         return ""
@@ -204,6 +298,11 @@ def preprocess_job_data(job_data):
     
     if 'industry' in job_data:
         job_data['industry'] = map_industry(job_data['industry'])
+
+    if 'location' in job_data:
+        loc = str(job_data['location']).strip()
+        loc = loc.split(',')[0] if loc else "Unknown"
+        job_data['location'] = map_location(loc)
     
     # Convert binary flags
     for col in ['has_company_logo', 'has_questions']:
@@ -267,16 +366,7 @@ def main():
     available_classifiers = list(set(available_classifiers))
     
     # Model selection
-    sampling_strategy = st.sidebar.selectbox(
-        "Sampling Strategy:",
-        available_sampling,
-        format_func=lambda x: {
-            'original': 'Original (No Sampling)',
-            'undersample': 'Random Under Sampling',
-            'hybrid': 'SMOTE-ENN Hybrid', 
-            'adasyn': 'ADASYN Over Sampling'
-        }.get(x, x)
-    )
+    sampling_strategy = "hybrid"
     
     classifier_type = st.sidebar.selectbox(
         "Classifier Type:",
