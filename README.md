@@ -41,7 +41,7 @@ This project focuses on detecting **fake job postings** from a dataset of job li
 ## Deployment
 The project is deployed on **Streamlit**:
 
-[🔗 View the App][((https://fakejobpostingsprediction.streamlit.app/)]
+[🔗 View the App](https://fakejobpostingsprediction.streamlit.app/)
 
 ---
 
