@@ -21,7 +21,7 @@ This project focuses on detecting **fake job postings** from a dataset of job li
 1. Text preprocessing (cleaning and generating `cleaned_text`).  
 2. Feature extraction using **TF-IDF**.  
 3. Training **machine learning models**: Random Forest, Naive Bayes, and SVM.  
-4. Handling **imbalanced data** using methods like undersampling, oversampling, and hybrid approaches.  
+4. Handling **imbalanced data** using methods like hybrid approaches.  
 5. Deploying the predictive model as a **Streamlit app** for easy interaction.
 
 > The Coding will put the **notebook folder** that contains ipynb notebook and model joblib.<br>
