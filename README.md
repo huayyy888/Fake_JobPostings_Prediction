@@ -40,7 +40,6 @@ This project focuses on detecting **fake job postings** from a dataset of job li
 
 ## Deployment
 The project is deployed on **Streamlit**:
-
 [🔗 View the App](https://fakejobpostingsprediction.streamlit.app/)
 
 ---
@@ -50,11 +49,13 @@ The project is deployed on **Streamlit**:
 Run the following commands in your terminal:
 
 ```bash
-git clone https://github.com/your-username/fake-job-detect-nlp.git
-cd fake-job-detect-nlp
+git clone https://github.com/huayyy888/Fake_JobPostings_Prediction.git
+cd Fake_JobPostings_Prediction
 python -m streamlit run app.py
+```
+## Future Work 
+Explore BERT or other neural network models for improved text understanding and prediction accuracy.
+Implement advanced ensemble methods for better performance on imbalanced datasets.
 
-
--
 
 
